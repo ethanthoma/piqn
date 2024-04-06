@@ -1,18 +1,16 @@
-from enum import unique
 from .entities import Token
 import json
 import os
-import warnings
 from typing import List, Tuple, Dict
 
 from sklearn.metrics import precision_recall_fscore_support as prfs
+import torch
 from transformers import BertTokenizer
 
 from piqn import util
 from piqn.entities import Document, Dataset, EntityType
 from piqn.input_reader import JsonInputReader
 import jinja2
-import math
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -28,7 +26,6 @@ class Evaluator:
         self._no_duplicate = no_duplicate
         self._save_prediction = save_prediction
 
-
         self._epoch = epoch
         self._dataset_label = dataset_label
 
@@ -43,13 +40,14 @@ class Evaluator:
         self._raw_preds = []
         self._raw_raw_preds = []
 
-        self._pseudo_entity_type = EntityType('Entity', 1, 'Entity', 'Entity')  # for span only evaluation
+        # for span only evaluation
+        self._pseudo_entity_type = EntityType('Entity', 1, 'Entity', 'Entity')
         self._cls_threshold = cls_threshold
         self._boundary_threshold = boundary_threshold
         self._convert_gt(self._dataset.documents)
 
-    def eval_batch(self, entity_logits: torch.tensor, p_left:torch.tensor, p_right:torch.tensor, outputs, batch = None):
-        batch_size = entity_logits.shape[0] 
+    def eval_batch(self, entity_logits: torch.tensor, p_left: torch.tensor, p_right: torch.tensor, outputs, batch=None):
+        batch_size = entity_logits.shape[0]
 
         multihead = False
         if multihead:
@@ -70,7 +68,6 @@ class Evaluator:
 
             # entity_prob = torch.sigmoid(entity_logits)
 
-
         batch_entity_types = entity_prob.argmax(dim=-1)
         batch_entity_scores = entity_prob.max(dim=-1)[0]
         batch_entity_mask = (batch_entity_scores > self._cls_threshold) * (batch_entity_types != 0)
@@ -85,13 +82,13 @@ class Evaluator:
         batch_entity_mask = batch_entity_mask * (batch_entity_spans[:,:,0] <= batch_entity_spans[:,:,1]) * (batch_entity_left_scores > self._boundary_threshold) * (batch_entity_right_scores > self._boundary_threshold)
 
         def roundlist(x):
-            return list(map(lambda x:round(x, 2), x))
+            return list(map(lambda x: round(x, 2), x))
 
         for i in range(batch_size):
-            
+
             doc = batch["meta_doc"][i]
             if self._input_reader.entity_type_count < 1000 and self._save_prediction:
-                decode_entity = dict(tokens=[t.phrase for t in doc.tokens], pre_entities=[], gt_entities = [], org_id= doc.doc_id)
+                decode_entity = dict(tokens=[t.phrase for t in doc.tokens], pre_entities=[], gt_entities=[], org_id=doc.doc_id)
 
                 gt_converted_entities = []
                 for entity in doc.entities:
@@ -104,7 +101,6 @@ class Evaluator:
                     gt_converted_entities.append(converted_entity)
                 decode_entity["gt_entities"] = sorted(gt_converted_entities, key=lambda e: e['start'])
 
-            
                 for j in range(entity_left.size(1)):
                     span_tokens = str(util.get_span_tokens(doc.tokens, batch_entity_spans[i][j]))
                     decode_entity["pre_entities"].append(dict(entity_left=entity_left[i][j].item(), entity_right=entity_right[i][j].item(), p_left=roundlist(p_left[i][j].tolist()), p_right=roundlist(p_right[i][j].tolist()), phrase=span_tokens, entity_type=self._input_reader.get_entity_type(batch_entity_types[i][j].item()).identifier, entity_prob = roundlist(entity_prob[i][j].tolist())))
@@ -128,9 +124,8 @@ class Evaluator:
 
             # valid_entity_scores = valid_entity_scores + valid_left_scores + valid_right_scores
 
-
             sample_pred_entities = self._convert_pred_entities(valid_entity_types, valid_entity_spans, valid_entity_scores, valid_left_scores, valid_right_scores, doc)
-            sample_pred_entities = sorted(sample_pred_entities, key=lambda x:x[3], reverse=True)
+            sample_pred_entities = sorted(sample_pred_entities, key=lambda x: x[3], reverse=True)
 
             if self._no_overlapping:
                 sample_pred_entities = self._remove_overlapping(sample_pred_entities)
@@ -155,20 +150,19 @@ class Evaluator:
         self._log("")
         gt, pred = self._convert_by_setting(self._gt_entities, self._pred_entities, include_entity_types=True)
         ner_eval = self._score(gt, pred, print_results=True)
-        
+
         self._log("")
         self._log("--- NER on Localization ---")
         self._log("")
         gt_wo_type, pred_wo_type = self._convert_by_setting(self._gt_entities, self._pred_entities, include_entity_types=False)
         ner_loc_eval = self._score(gt_wo_type, pred_wo_type, print_results=True)
 
-
         self._log("")
         self._log("--- NER on Classification ---")
         # self._log("An entity is considered correct if the entity type and span is predicted correctly")
         self._log("")
         # gt, pred = self._convert_by_setting(self._gt_entities, self._pred_entities, include_entity_types=True)
-        ner_cls_eval = self._score(gt, pred, print_results=True, cls_metric= True)
+        ner_cls_eval = self._score(gt, pred, print_results=True, cls_metric=True)
 
         return ner_eval, ner_loc_eval, ner_cls_eval
 
@@ -215,23 +209,22 @@ class Evaluator:
         if len(self._raw_raw_preds) != 0:
             with open(self._predictions_path % ("raw_raw_all", epoch), 'w') as predictions_file:
                 json.dump(self._raw_raw_preds, predictions_file)
-        # 
         raw_preds_match_gt = []
         raw_preds_not_match_gt = []
         for i, (pre, gt) in enumerate(zip(self._raw_preds, self._gt_entities)):
             doc = self._dataset.documents[i]
-            
+
             def is_match(ent):
                 for gt_ent in gt:
-                    if ent["start"] == gt_ent[0] and  ent["end"] == gt_ent[1] and ent["entity_type"] == gt_ent[2].identifier:
+                    if ent["start"] == gt_ent[0] and ent["end"] == gt_ent[1] and ent["entity_type"] == gt_ent[2].identifier:
                         return True
                 else:
                     return False
             # pre_match_gt = list(filter(is_match, pre))
             # pre_not_match_gt = list(filter(lambda a: not is_match(a), pre))
             # pre_not_match_gt = []
-            pre_not_match_gt = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id= doc.doc_id)
-            no_dup_pre_match_gt = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id= doc.doc_id)
+            pre_not_match_gt = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id=doc.doc_id)
+            no_dup_pre_match_gt = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id=doc.doc_id)
             pre_match_gt_set = []
             # match gt need dedep; not match gt keep all
 
@@ -298,8 +291,8 @@ class Evaluator:
 
     def _convert_pred_entities(self, pred_types: torch.tensor, pred_spans: torch.tensor, pred_scores: torch.tensor,  left_scores, right_scores, doc):
         converted_preds = []
-        
-        decode_entity = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id= doc.doc_id)
+
+        decode_entity = dict(tokens=[t.phrase for t in doc.tokens], entities=[], org_id=doc.doc_id)
         for i in range(pred_types.shape[0]):
             label_idx = pred_types[i].item()
             entity_type = self._input_reader.get_entity_type(label_idx)
@@ -311,7 +304,7 @@ class Evaluator:
 
             converted_pred = (start, end, entity_type, cls_score)
             converted_preds.append(converted_pred)
-            decode_entity["entities"].append({"start": start, "end": end, "entity_type":entity_type.identifier, "cls_score": round(cls_score, 2), "left_score": round(left_score, 2), "right_score": round(right_score, 2)})
+            decode_entity["entities"].append({"start": start, "end": end, "entity_type": entity_type.identifier, "cls_score": round(cls_score, 2), "left_score": round(left_score, 2), "right_score": round(right_score, 2)})
         self._raw_preds.append(decode_entity)
         return converted_preds
 
@@ -361,9 +354,9 @@ class Evaluator:
             return False
         else:
             return True
-    
+
     def _check_partial_overlap(self, e1, e2):
-        if (e1[0] < e2[0] and e2[0]<=e1[1] and e1[1]<e2[1] ) or  (e2[0]<e1[0] and e1[0] <= e2[1] and e2[1] < e1[1]):
+        if (e1[0] < e2[0] and e2[0] <= e1[1] and e1[1] < e2[1]) or (e2[0] < e1[0] and e1[0] <= e2[1] and e2[1] < e1[1]):
             return True
         else:
             return False
@@ -394,7 +387,7 @@ class Evaluator:
 
         return converted_gt, converted_pred
 
-    def _score(self, gt: List[List[Tuple]], pred: List[List[Tuple]], print_results: bool = False, cls_metric = False):
+    def _score(self, gt: List[List[Tuple]], pred: List[List[Tuple]], print_results: bool = False, cls_metric=False):
         assert len(gt) == len(pred)
         # import pdb;pdb.set_trace()
 
@@ -406,8 +399,8 @@ class Evaluator:
             union = set()
             if cls_metric:
                 union.update(sample_gt)
-                loc_gt = list(map(lambda x:(x[0],x[1]), sample_gt))
-                sample_loc_true_pred =  list(filter(lambda x:(x[0], x[1]) in  loc_gt, sample_pred))
+                loc_gt = list(map(lambda x: (x[0], x[1]), sample_gt))
+                sample_loc_true_pred = list(filter(lambda x: (x[0], x[1]) in loc_gt, sample_pred))
                 union.update(sample_loc_true_pred)
             else:
                 union.update(sample_gt)
@@ -520,7 +513,6 @@ class Evaluator:
         for token in tokens:
             phrases.append(token.phrase)
         text = " ".join(phrases)
-        
 
         # text = self._prettify(self._text_encoder.decode(encoding))
         text = self._prettify(text)
@@ -538,15 +530,15 @@ class Evaluator:
         e1 = ""
         for i in range(start):
             ctx_before += tokens[i].phrase
-            if i!=start-1:
+            if i != start-1:
                 ctx_before += " "
         for i in range(end + 1, len(tokens)):
             ctx_after += tokens[i].phrase
-            if i!=(len(tokens)-1):
+            if i != (len(tokens)-1):
                 ctx_after += " "
         for i in range(start, end + 1):
             e1 += tokens[i].phrase
-            if i!=end:
+            if i != end:
                 e1 += " "
 
         html = ctx_before + tag_start + e1 + '</span> ' + ctx_after

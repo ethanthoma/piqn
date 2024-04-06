@@ -4,20 +4,17 @@ from collections import defaultdict
 import json
 import math
 import os
-import gc
 
 import torch
-from torch.nn import DataParallel
 from torch.optim import Optimizer
-import transformers
 from torch.utils.data import DataLoader
-from transformers import AdamW, BertConfig
-from transformers import BertTokenizer, RobertaTokenizer, AutoTokenizer
+from transformers import AdamW
+from transformers import AutoTokenizer
 
 from piqn import models
 from piqn import sampling
 from piqn import util
-from piqn.entities import Dataset, DistributedIterableDataset
+from piqn.entities import Dataset
 from piqn.evaluator import Evaluator
 from piqn.input_reader import JsonInputReader, BaseInputReader
 from piqn.loss import PIQNLoss, Loss
@@ -47,16 +44,18 @@ def get_linear_schedule_with_warmup_two_stage(optimizer, num_warmup_steps_stage_
             )
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+
 class PIQNTrainer(BaseTrainer):
     """ Joint entity and relation extraction training and evaluation """
 
     def __init__(self, args: argparse.Namespace):
+        print("INIT PIOQN TRAINER")
         super().__init__(args)
         self._tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path,
-                                                    local_files_only = True,
-                                                    use_fast = False,
-                                                    do_lower_case=args.lowercase,
-                                                    cache_dir=args.cache_path)
+                                                        local_files_only=True,
+                                                        use_fast=False,
+                                                        do_lower_case=args.lowercase,
+                                                        cache_dir=args.cache_path)
         # path to export predictions to
         self._predictions_path = os.path.join(self._log_path, 'predictions_%s_epoch_%s.json')
 
@@ -65,11 +64,11 @@ class PIQNTrainer(BaseTrainer):
 
         self._logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
-    def load_model(self, input_reader, is_eval = False):
+    def load_model(self, input_reader, is_eval=False):
         args = self.args
         # create model
         model_class = models.get_model(args.model_type)
-        
+
         # load model
         # config = BertConfig.from_pretrained(args.model_path, cache_dir=args.cache_path)
         config = models.EntityAwareBertConfig.from_pretrained(args.model_path, cache_dir=args.cache_path, entity_queries_num = args.entity_queries_num, entity_emb_size = args.entity_emb_size, mask_ent2tok = args.mask_ent2tok,  mask_tok2ent = args.mask_tok2ent, mask_ent2ent = args.mask_ent2ent, mask_entself = args.mask_entself, entity_aware_attention = args.entity_aware_attention, entity_aware_selfout = args.entity_aware_selfout, entity_aware_intermediate = args.entity_aware_intermediate, entity_aware_output = args.entity_aware_output, use_entity_pos = args.use_entity_pos, use_entity_common_embedding = args.use_entity_common_embedding)
@@ -80,35 +79,35 @@ class PIQNTrainer(BaseTrainer):
         model = model_class.from_pretrained(args.model_path,
                                             # proxies = {'http': '10.15.82.42:7890'},
                                             # local_files_only = True,
-                                            config = config,
-                                            embed = embed,
+                                            config=config,
+                                            embed=embed,
                                             # piqn model parameters
                                             entity_type_count=input_reader.entity_type_count,
                                             prop_drop=args.prop_drop,
                                             freeze_transformer=args.freeze_transformer,
-                                            pos_size = args.pos_size,
-                                            char_lstm_layers = args.char_lstm_layers, 
-                                            char_lstm_drop = args.char_lstm_drop, 
-                                            char_size = args.char_size, 
-                                            use_glove = args.use_glove, 
-                                            use_pos = args.use_pos, 
-                                            use_char_lstm = args.use_char_lstm,
-                                            lstm_layers = args.lstm_layers,
-                                            pool_type = args.pool_type,
-                                            word_mask_tok2ent = args.word_mask_tok2ent,
-                                            word_mask_ent2tok = args.word_mask_ent2tok,
-                                            word_mask_ent2ent = args.word_mask_ent2ent,
-                                            word_mask_entself = args.word_mask_entself,
-                                            share_query_pos = args.share_query_pos,
-                                            use_token_level_encoder = args.use_token_level_encoder,
-                                            num_token_entity_encoderlayer = args.num_token_entity_encoderlayer,
-                                            use_entity_attention = args.use_entity_attention,
-                                            use_masked_lm = args.use_masked_lm,
-                                            use_aux_loss =  args.use_aux_loss,
-                                            use_lstm = args.use_lstm,
-                                            inlcude_subword_aux_loss = args.inlcude_subword_aux_loss,
-                                            last_layer_for_loss = args.last_layer_for_loss,
-                                            split_epoch = args.split_epoch)
+                                            pos_size=args.pos_size,
+                                            char_lstm_layers=args.char_lstm_layers, 
+                                            char_lstm_drop=args.char_lstm_drop, 
+                                            char_size=args.char_size, 
+                                            use_glove=args.use_glove, 
+                                            use_pos=args.use_pos, 
+                                            use_char_lstm=args.use_char_lstm,
+                                            lstm_layers=args.lstm_layers,
+                                            pool_type=args.pool_type,
+                                            word_mask_tok2ent=args.word_mask_tok2ent,
+                                            word_mask_ent2tok=args.word_mask_ent2tok,
+                                            word_mask_ent2ent=args.word_mask_ent2ent,
+                                            word_mask_entself=args.word_mask_entself,
+                                            share_query_pos=args.share_query_pos,
+                                            use_token_level_encoder=args.use_token_level_encoder,
+                                            num_token_entity_encoderlayer=args.num_token_entity_encoderlayer,
+                                            use_entity_attention=args.use_entity_attention,
+                                            use_masked_lm=args.use_masked_lm,
+                                            use_aux_loss=args.use_aux_loss,
+                                            use_lstm=args.use_lstm,
+                                            inlcude_subword_aux_loss=args.inlcude_subword_aux_loss,
+                                            last_layer_for_loss=args.last_layer_for_loss,
+                                            split_epoch=args.split_epoch)
         num_params = sum(param.numel() for param in model.parameters())
         self._logger.info(f"Model Parameters Number: {num_params}")
 
@@ -122,7 +121,7 @@ class PIQNTrainer(BaseTrainer):
 
                 state_dict = model.model.state_dict().copy()
                 for name, param in state_dict.items():
-                    countpart = name.replace("entity_", "").replace("e2w_","")
+                    countpart = name.replace("entity_", "").replace("e2w_", "")
                     if countpart not in state_dict or countpart == name or "embedding" in name or "LayerNorm" in name:
                         # print(countpart)
                         continue
@@ -166,7 +165,7 @@ class PIQNTrainer(BaseTrainer):
             self._logger.info("Updates per epoch: %s" % updates_epoch)
             self._logger.info("Updates total: %s" % (updates_total_stage_one + updates_total_stage_two))
 
-        model = self.load_model(input_reader, is_eval = False)
+        model = self.load_model(input_reader, is_eval=False)
 
         model.to(self._device)
         if args.local_rank != -1:
@@ -176,13 +175,12 @@ class PIQNTrainer(BaseTrainer):
         optimizer_params = self._get_optimizer_params(model)
         optimizer = AdamW(optimizer_params, lr=args.lr, weight_decay=args.weight_decay, correct_bias=False)
         scheduler = get_linear_schedule_with_warmup_two_stage(optimizer,
-                                                            num_warmup_steps_stage_one = args.lr_warmup * updates_total_stage_one,
-                                                            num_training_steps_stage_one = updates_total_stage_one,
-                                                            num_warmup_steps_stage_two = args.lr_warmup * updates_total_stage_two,
-                                                            num_training_steps_stage_two = updates_total_stage_two)
+                                                            num_warmup_steps_stage_one=args.lr_warmup * updates_total_stage_one,
+                                                            num_training_steps_stage_one=updates_total_stage_one,
+                                                            num_warmup_steps_stage_two=args.lr_warmup * updates_total_stage_two,
+                                                            num_training_steps_stage_two=updates_total_stage_two)
 
-
-        compute_loss = PIQNLoss(input_reader.entity_type_count, self._device, model, optimizer, scheduler, args.max_grad_norm, args.nil_weight, args.match_class_weight, args.match_boundary_weight, args.loss_class_weight, args.loss_boundary_weight, args.type_loss, solver = args.match_solver, match_warmup_epoch = args.match_warmup_epoch)
+        compute_loss = PIQNLoss(input_reader.entity_type_count, self._device, model, optimizer, scheduler, args.max_grad_norm, args.nil_weight, args.match_class_weight, args.match_boundary_weight, args.loss_class_weight, args.loss_boundary_weight, args.type_loss, solver=args.match_solver, match_warmup_epoch=args.match_warmup_epoch)
 
         # eval validation set
         if args.init_eval and self.record:
@@ -208,13 +206,13 @@ class PIQNTrainer(BaseTrainer):
                     extra = dict(epoch=epoch, updates_epoch=updates_epoch, epoch_iteration=0)
                     # if "pretrain" in args.label:
                     self._save_model(self._save_path, model, self._tokenizer, epoch * updates_epoch,
-                        optimizer=optimizer if args.save_optimizer else None, extra=extra,
-                        include_iteration=False, name='best_model')
+                                     optimizer=optimizer if args.save_optimizer else None, extra=extra,
+                                     include_iteration=False, name='best_model')
             if self.record:
                 if args.save_path_include_iteration:
                     self._save_model(self._save_path, model, self._tokenizer, epoch,
-                            optimizer=optimizer if args.save_optimizer else None, extra=extra,
-                            include_iteration=args.save_path_include_iteration, name='model')
+                                     optimizer=optimizer if args.save_optimizer else None, extra=extra,
+                                     include_iteration=args.save_path_include_iteration, name='model')
                 self._logger.info(f"Best F1 score: {best_f1}, achieved at Epoch: {best_epoch}")
 
         # save final model
@@ -222,13 +220,14 @@ class PIQNTrainer(BaseTrainer):
         global_iteration = args.epochs * updates_epoch
         if self.record:
             self._save_model(self._save_path, model, self._tokenizer, global_iteration,
-                            optimizer=optimizer if args.save_optimizer else None, extra=extra,
-                            include_iteration=False, name='final_model')
+                             optimizer=optimizer if args.save_optimizer else None, extra=extra,
+                             include_iteration=False, name='final_model')
             self._logger.info("Logged in: %s" % self._log_path)
             self._logger.info("Saved in: %s" % self._save_path)
             self._close_summary_writer()
 
     def eval(self, dataset_path: str, types_path: str, input_reader_cls: BaseInputReader):
+        print("EVAL model")
         args = self.args
         dataset_label = 'test'
 
@@ -243,12 +242,11 @@ class PIQNTrainer(BaseTrainer):
         input_reader.read({dataset_label: dataset_path})
         self._log_datasets(input_reader)
 
-        model = self.load_model(input_reader, is_eval = True)
+        model = self.load_model(input_reader, is_eval=True)
 
         model.to(self._device)
         # if args.local_rank != -1:
         #     model = DDP(model, device_ids=[args.local_rank])
-
 
         # evaluate
         self._eval(model, input_reader.get_dataset(dataset_label), input_reader)
@@ -278,8 +276,7 @@ class PIQNTrainer(BaseTrainer):
                 shuffle = False
 
         data_loader = DataLoader(dataset, batch_size=args.train_batch_size, shuffle=shuffle, drop_last=True,
-                                    num_workers=args.sampling_processes, collate_fn=sampling.collate_fn_padding,  sampler=train_sampler)
-                                    
+                                 num_workers=args.sampling_processes, collate_fn=sampling.collate_fn_padding,  sampler=train_sampler)
 
         model.zero_grad()
 
@@ -325,7 +322,7 @@ class PIQNTrainer(BaseTrainer):
 
         if isinstance(dataset, Dataset):
             data_loader = DataLoader(dataset, batch_size=args.eval_batch_size, shuffle=False, drop_last=False,
-                                 num_workers=args.sampling_processes, collate_fn=sampling.collate_fn_padding, sampler=eval_sampler)
+                                     num_workers=args.sampling_processes, collate_fn=sampling.collate_fn_padding, sampler=eval_sampler)
         else:
             data_loader = DataLoader(dataset, batch_size=args.eval_batch_size, drop_last=False, collate_fn=sampling.collate_fn_padding, sampler=eval_sampler)
 

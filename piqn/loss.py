@@ -1,25 +1,23 @@
 from abc import ABC
-from pdb import set_trace
 
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from torch._C import dtype
 from .matcher import HungarianMatcher
-from .focalloss import FocalLoss, sigmoid_focal_loss
-import torchsnooper
+from .focalloss import FocalLoss
 
 
 class Loss(ABC):
     def compute(self, *args, **kwargs):
         pass
 
+
 class PIQNLoss(Loss):
     def __init__(self, entity_type_count, device, model, optimizer, scheduler, max_grad_norm, nil_weight, match_class_weight, match_boundary_weight, loss_class_weight, loss_boundary_weight, type_loss, solver, match_warmup_epoch = 0):
         self._model = model
         self._optimizer = optimizer
         self._scheduler = scheduler
-        
+
         # losses = ['labels', 'boundary', 'cardinality']
         losses = ['labels', 'boundary']
         self.weight_dict = {'loss_ce': loss_class_weight, 'loss_boundary': loss_boundary_weight}
@@ -28,7 +26,7 @@ class PIQNLoss(Loss):
         self._max_grad_norm = max_grad_norm
 
     def del_attrs(self):
-        del self._optimizer 
+        del self._optimizer
         del self._scheduler
 
     def compute(self, entity_logits, pred_left, pred_right, output, gt_types, gt_spans, entity_masks, epoch, deeply_weight = "same", seq_logits = None, gt_seq_labels = None, batch = None):
@@ -38,11 +36,9 @@ class PIQNLoss(Loss):
         if seq_logits is not None:
             loss_fct = nn.CrossEntropyLoss(ignore_index=0)
             maskedlm_loss = loss_fct(seq_logits.view(-1, seq_logits.size(-1)), gt_seq_labels.view(-1))
-            
-        
 
         gt_types_wo_nil = gt_types.masked_select(entity_masks)
-        
+
         # if len(gt_types_wo_nil) == 0:
         #     return 0.1
 
@@ -50,14 +46,14 @@ class PIQNLoss(Loss):
         entity_masks = entity_masks.unsqueeze(2).repeat(1, 1, 2)
         spans_wo_nil = gt_spans.masked_select(entity_masks).view(-1, 2)
 
-        targets = {"labels": gt_types_wo_nil, "gt_left":spans_wo_nil[:, 0], "gt_right":spans_wo_nil[:, 1], "sizes":sizes}
+        targets = {"labels": gt_types_wo_nil, "gt_left": spans_wo_nil[:, 0], "gt_right": spans_wo_nil[:, 1], "sizes": sizes}
 
         train_loss = []
         for out_dict in output:
             entity_logits, pred_left, pred_right = out_dict["entity_logits"], out_dict["p_left"], out_dict["p_right"]
-            outputs = {"pred_logits":entity_logits, "pred_left":pred_left, "pred_right":pred_right, "token_mask": batch["token_masks"]}
+            outputs = {"pred_logits":entity_logits, "pred_left": pred_left, "pred_right": pred_right, "token_mask": batch["token_masks"]}
             loss_dict = self.criterion(outputs, targets, epoch)
-            
+
             train_loss.append(sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict.keys()))
         if deeply_weight == "same":
             deeply_weight = [1] * len(output)
@@ -96,10 +92,10 @@ class Criterion(nn.Module):
         """
         super().__init__()
         self.entity_type_count = entity_type_count
-        self.matcher = HungarianMatcher(cost_class = match_class_weight, cost_span = match_boundary_weight, solver = solver)
+        self.matcher = HungarianMatcher(cost_class=match_class_weight, cost_span=match_boundary_weight, solver=solver)
         self.match_warmup_epoch = match_warmup_epoch
         if match_warmup_epoch > 0:
-            self.order_matcher = HungarianMatcher(solver = "order")
+            self.order_matcher = HungarianMatcher(solver="order")
         self.weight_dict = weight_dict
         self.nil_weight = nil_weight
         self.losses = losses
@@ -108,7 +104,7 @@ class Criterion(nn.Module):
         self.register_buffer('empty_weight', empty_weight)
         self.type_loss = type_loss
         if type_loss == "focalloss":
-            self.focalloss = FocalLoss(entity_type_count, alpha=empty_weight, gamma=2, reduction = "mean")
+            self.focalloss = FocalLoss(entity_type_count, alpha=empty_weight, gamma=2, reduction="mean")
 
     def loss_labels(self, outputs, targets, indices, num_spans):
         """Classification loss (NLL)
@@ -116,15 +112,14 @@ class Criterion(nn.Module):
         """
         assert 'pred_logits' in outputs
 
-
         src_logits = outputs['pred_logits']
         idx = self._get_src_permutation_idx(indices)
 
         # indices [(tensor([44]), tensor([0])), (tensor([20, 42, 46, 56, 58]), tensor([2, 0, 3, 4, 1])), (tensor([ 7,  8, 11, 27]), tensor([0, 1, 3, 2])), (tensor([ 2, 14, 31, 39, 41, 43, 50]), tensor([6, 5, 4, 3, 0, 2, 1])), (tensor([45]), tensor([0])), (tensor([14, 18]), tensor([1, 0])), (tensor([3]), tensor([0])), (tensor([44, 47, 55]), tensor([2, 0, 1]))]
-        
+
         # self._get_src_permutation_idx(indices) (tensor([0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 5, 5, 6, 7, 7, 7]), tensor([44, 20, 42, 46, 56, 58,  7,  8, 11, 27,  2, 14, 31, 39, 41, 43, 50, 45, 14, 18,  3, 44, 47, 55]))
         # self._get_tgt_permutation_idx(indices) (tensor([0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 5, 5, 6, 7, 7, 7]), tensor([0, 2, 0, 3, 4, 1, 0, 1, 3, 2, 6, 5, 4, 3, 0, 2, 1, 0, 1, 0, 0, 2, 0, 1]))
-        
+
         # targets["labels"] (tensor([5], device='cuda:2'), tensor([2, 2, 2, 2, 2], device='cuda:2'), tensor([2, 5, 5, 5], device='cuda:2'), tensor([2, 5, 2, 2, 3, 6, 3], device='cuda:2'), tensor([2], device='cuda:2'), tensor([4, 6], device='cuda:2'), tensor([2], device='cuda:2'), tensor([5, 2, 2], device='cuda:2'))
 
         # target_classes_o tensor([5, 2, 2, 2, 2, 2, 2, 5, 5, 5, 3, 6, 3, 2, 2, 2, 5, 2, 6, 4, 2, 2, 5, 2], device='cuda:2')
@@ -186,13 +181,13 @@ class Criterion(nn.Module):
         # target_spans_right = torch.cat([t['gt_right'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         gt_left = targets["gt_left"].split(targets["sizes"], dim=0)
-        target_spans_left = torch.cat([t[i] for t, (_, i) in zip(gt_left , indices)], dim=0)
+        target_spans_left = torch.cat([t[i] for t, (_, i) in zip(gt_left, indices)], dim=0)
         gt_right = targets["gt_right"].split(targets["sizes"], dim=0)
-        target_spans_right = torch.cat([t[i] for t, (_, i) in zip(gt_right , indices)], dim=0)
+        target_spans_right = torch.cat([t[i] for t, (_, i) in zip(gt_right, indices)], dim=0)
 
         left_onehot = torch.zeros([target_spans_left.size(0), src_spans_left.size(1)], dtype=torch.float32).to(device=target_spans_left.device)
         left_onehot.scatter_(1, target_spans_left.unsqueeze(1), 1)
-    
+
         right_onehot = torch.zeros([target_spans_right.size(0), src_spans_right.size(1)], dtype=torch.float32).to(device=target_spans_right.device)
         right_onehot.scatter_(1, target_spans_right.unsqueeze(1), 1)
 
@@ -230,7 +225,7 @@ class Criterion(nn.Module):
     # @torchsnooper.snoop()
     def forward(self, outputs, targets, epoch):
         # Retrieve the matching between the outputs of the last layer and the targets
-        
+
         if epoch < self.match_warmup_epoch:
             indices = self.order_matcher(outputs, targets)
         else:
@@ -245,3 +240,4 @@ class Criterion(nn.Module):
         for loss in self.losses:
             losses.update(self.get_loss(loss, outputs, targets, indices, num_spans))
         return losses
+

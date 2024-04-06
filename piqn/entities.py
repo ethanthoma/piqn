@@ -5,8 +5,8 @@ from torch.utils import data
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import IterableDataset as IterableTorchDataset
 from piqn import sampling
-import itertools
 import torch.distributed as dist
+
 
 class RelationType:
     def __init__(self, identifier, index, short_name, verbose_name, symmetric=False):
@@ -139,7 +139,7 @@ class Token:
     @property
     def pos(self):
         return self._pos
-    
+
     @property
     def pos_id(self):
         # return self.POS_MAP.index(self._pos)
@@ -209,7 +209,7 @@ class Entity:
         return self.span_start, self.span_end, self._entity_type
 
     def as_tuple_token(self):
-        return self._tokens[0].index,self._tokens[-1].index, self._entity_type
+        return self._tokens[0].index, self._tokens[-1].index, self._entity_type
 
     @property
     def entity_type(self):
@@ -233,7 +233,7 @@ class Entity:
 
     @property
     def span_token(self):
-        return self._tokens[0].index,self._tokens[-1].index
+        return self._tokens[0].index, self._tokens[-1].index
 
     @property
     def phrase(self):
@@ -362,13 +362,11 @@ class Document:
     def seg_encoding(self, value):
         self._seg_encoding = value
 
-
     def __str__(self) -> str:
         raw_document = " ".join(str(t) for t in self.tokens)
         raw_entities = " | ".join(str(e) for e in self.entities)
-        
+
         return raw_document + "\n" + raw_entities
-        
 
     def __eq__(self, other):
         if isinstance(other, Document):
@@ -410,7 +408,7 @@ class Dataset(TorchDataset):
     TRAIN_MODE = 'train'
     EVAL_MODE = 'eval'
 
-    def __init__(self, label, rel_types, entity_types, random_mask_word = False, tokenizer = None, repeat_gt_entities = None):
+    def __init__(self, label, rel_types, entity_types, random_mask_word=False, tokenizer=None, repeat_gt_entities=None):
         self._label = label
         self._rel_types = rel_types
         self._entity_types = entity_types
@@ -505,11 +503,12 @@ class Dataset(TorchDataset):
     def relation_count(self):
         return len(self._relations)
 
+
 class DistributedIterableDataset(IterableTorchDataset):
     TRAIN_MODE = 'train'
     EVAL_MODE = 'eval'
 
-    def __init__(self, label, path, rel_types, entity_types, input_reader, random_mask_word = False, tokenizer = None, repeat_gt_entities = None):
+    def __init__(self, label, path, rel_types, entity_types, input_reader, random_mask_word=False, tokenizer=None, repeat_gt_entities=None):
         self._label = label
         self._path = path
         self._rel_types = rel_types
@@ -572,20 +571,17 @@ class DistributedIterableDataset(IterableTorchDataset):
                     doc = self._input_reader._parse_document(doc, self)
                     if doc is not None:
                         if self._mode == Dataset.TRAIN_MODE:
-                            yield sampling.create_train_sample(doc, random_mask=self.random_mask_word, tokenizer = self._tokenizer, repeat_gt_entities = self._repeat_gt_entities)
+                            yield sampling.create_train_sample(doc, random_mask=self.random_mask_word, tokenizer=self._tokenizer, repeat_gt_entities=self._repeat_gt_entities)
                         else:
                             yield sampling.create_eval_sample(doc)
-                inx += 1 # maybe imblance
-
+                inx += 1  # maybe imblance
 
     def _get_stream(self, path):
         # return itertools.cycle(self.parse_doc(path))
         return self.parse_doc(path)
 
-
     def __iter__(self):
         return self._get_stream(self._path)
-    
 
     def switch_mode(self, mode):
         self._mode = mode

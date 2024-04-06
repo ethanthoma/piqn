@@ -49,7 +49,6 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--cls_threshold', type=float, default=0.5)
     arg_parser.add_argument('--boundary_threshold', type=float, default=0.5)
 
-    
     arg_parser.add_argument('--pos_size', type=int, default=25)
     arg_parser.add_argument('--char_lstm_layers', type=int, default=1)
     arg_parser.add_argument('--lstm_layers', type=int, default=3)
@@ -60,10 +59,8 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--use_char_lstm', action='store_true', default=False)
     arg_parser.add_argument('--use_lstm', action='store_true', default=False)
 
-
-    arg_parser.add_argument('--pool_type', type=str, default = "max")
-    arg_parser.add_argument('--wordvec_path', type=str, default = "../glove/glove.6B.300d.txt")
-
+    arg_parser.add_argument('--pool_type', type=str, default="max")
+    arg_parser.add_argument('--wordvec_path', type=str, default="../glove/glove.6B.300d.txt")
 
     arg_parser.add_argument('--share_query_pos', action='store_true', default=False)
     arg_parser.add_argument('--use_token_level_encoder', action='store_true', default=False)
@@ -82,7 +79,7 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--word_mask_tok2ent', action='store_true', default=False)
     arg_parser.add_argument('--word_mask_ent2ent', action='store_true', default=False)
     arg_parser.add_argument('--word_mask_entself', action='store_true', default=False)
-    
+
     arg_parser.add_argument('--entity_aware_attention', action='store_true', default=False)
     arg_parser.add_argument('--entity_aware_selfout', action='store_true', default=False)
     arg_parser.add_argument('--entity_aware_intermediate', action='store_true', default=False)
@@ -96,8 +93,6 @@ def _add_common_args(arg_parser):
     arg_parser.add_argument('--use_aux_loss', action='store_true', default=False)
     arg_parser.add_argument('--repeat_gt_entities', type=int, default=-1, help="")
 
-
-    
     # Misc
     arg_parser.add_argument('--seed', type=int, default=-1, help="Seed")
     arg_parser.add_argument('--cache_path', type=str, default=None,
@@ -115,7 +110,6 @@ def train_argparser():
     arg_parser.add_argument('--save_path', type=str, help="Path to directory where model checkpoints are stored")
     arg_parser.add_argument('--save_path_include_iteration', action='store_true', default=False)
 
-    
     arg_parser.add_argument('--init_eval', action='store_true', default=False,
                             help="If true, evaluate validation set before training")
     arg_parser.add_argument('--save_optimizer', action='store_true', default=False,
@@ -133,27 +127,18 @@ def train_argparser():
     arg_parser.add_argument('--weight_decay', type=float, default=0.01, help="Weight decay to apply")
     arg_parser.add_argument('--max_grad_norm', type=float, default=1.0, help="Maximum gradient norm")
 
-
-    
     arg_parser.add_argument('--match_solver', type=str, help="", default="hungarian")
     arg_parser.add_argument('--type_loss', type=str, help="", default="celoss")
     arg_parser.add_argument('--match_warmup_epoch', type=int, help="", default=0)
 
-    
-    
     arg_parser.add_argument('--nil_weight', type=float, default=-1)
     arg_parser.add_argument('--match_boundary_weight', type=float, default=10.0)
     arg_parser.add_argument('--match_class_weight', type=float, default=2.0)
     arg_parser.add_argument('--loss_boundary_weight', type=float, default=2.0)
     arg_parser.add_argument('--loss_class_weight', type=float, default=2.0)
 
-    
-    
     arg_parser.add_argument('--deeply_weight', type=str, help="", default="same")
-    
-    
 
-    
     arg_parser.add_argument('--copy_weight', action='store_true', default=False)
 
     _add_common_args(arg_parser)

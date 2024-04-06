@@ -11,7 +11,7 @@ class HungarianMatcher(nn.Module):
     while the others are un-matched (and thus treated as non-objects).
     """
 
-    def __init__(self, cost_class: float = 1, cost_span: float = 1, solver = "hungarian"):
+    def __init__(self, cost_class: float = 1, cost_span: float = 1, solver="hungarian"):
         """Creates the matcher
         Params:
             cost_class: This is the relative weight of the classification error in the matching cost
@@ -44,21 +44,21 @@ class HungarianMatcher(nn.Module):
 
         if self.solver == "order":
             sizes = targets["sizes"]
-            indices = [(list(range(size)),list(range(size))) for size in sizes]
+            indices = [(list(range(size)), list(range(size))) for size in sizes]
         else:
             bs, num_queries = outputs["pred_logits"].shape[:2]
 
             # We flatten to compute the cost matrices in a batch
-            out_prob = outputs["pred_logits"].flatten(0, 1).softmax(dim=-1) # [batch_size * num_queries, 8]
+            out_prob = outputs["pred_logits"].flatten(0, 1).softmax(dim=-1)  # [batch_size * num_queries, 8]
 
             entity_left = outputs["pred_left"].flatten(0, 1)
-            entity_right = outputs["pred_right"].flatten(0, 1) # [batch_size * num_queries]
+            entity_right = outputs["pred_right"].flatten(0, 1)  # [batch_size * num_queries]
 
 
             gt_ids = targets["labels"]
             gt_left = targets["gt_left"]
             gt_right = targets["gt_right"]
-            
+
             # import pdb;pdb.set_trace()
             cost_class = -out_prob[:, gt_ids]
             cost_span = -(entity_left[:, gt_left] + entity_right[:, gt_right])
@@ -70,7 +70,7 @@ class HungarianMatcher(nn.Module):
 
             sizes = targets["sizes"]
             indices = None
-            
+
             if self.solver == "hungarian":
                 C = C.cpu()
                 indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]

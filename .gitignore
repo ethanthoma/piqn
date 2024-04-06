@@ -1,0 +1,8 @@
+ENV/
+error/
+__pycache__/
+**/__pycache__/
+output/
+outputs/
+hf/
+data/

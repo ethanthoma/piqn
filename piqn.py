@@ -11,8 +11,10 @@ warnings.filterwarnings("ignore")
 
 def __train(run_args):
     trainer = PIQNTrainer(run_args)
-    trainer.train(train_path=run_args.train_path, valid_path=run_args.valid_path,
-                  types_path=run_args.types_path, input_reader_cls=input_reader.JsonInputReader)
+    trainer.train(train_path=run_args.train_path,
+                  valid_path=run_args.valid_path,
+                  types_path=run_args.types_path,
+                  input_reader_cls=input_reader.JsonInputReader)
 
 
 def _train():
@@ -21,8 +23,10 @@ def _train():
 
 
 def __eval(run_args):
+    print("RUNNING EVAL")
     trainer = PIQNTrainer(run_args)
-    trainer.eval(dataset_path=run_args.dataset_path, types_path=run_args.types_path,
+    trainer.eval(dataset_path=run_args.dataset_path,
+                 types_path=run_args.types_path,
                  input_reader_cls=input_reader.JsonInputReader)
 
 
@@ -41,4 +45,5 @@ if __name__ == '__main__':
     elif args.mode == 'eval':
         _eval()
     else:
-        raise Exception("Mode not in ['train', 'eval'], e.g. 'python piqn.py train ...'")
+        raise Exception("Mode not in ['train', 'eval'], e.g. \
+                        'python piqn.py train ...'")
