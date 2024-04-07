@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
 #SBATCH --account=def-gerope
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-16:00:00
 #SBATCH --tasks=1
 #SBATCH --output=output/%j.out
-#SBATCH --error=error/%j.out
 #SBATCH --cpus-per-task=20
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:v100:4
@@ -29,6 +28,6 @@ pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
 
 # run eval
-python piqn.py train --config ./configs/flat.conf
+python piqn.py train --config ./configs/nested.conf
 
 deactivate

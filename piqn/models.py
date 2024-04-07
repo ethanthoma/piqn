@@ -526,17 +526,19 @@ class EntityTypePredictor(nn.Module):
         attn_output = attn_output.transpose(0, 1)
         h_entity += attn_output
 
-        p_left_transformed = self.Wl(p_left)
-        p_right_transformed = self.Wr(p_right)
-
         # # B N T      B T H   ->   B N H 。
         # p_left = p_left.detach()
         # p_right = p_right.detach()
 
-        left_token = torch.matmul(p_left_transformed, h_token)
-        right_token = torch.matmul(p_right_transformed, h_token)
+        h_token_expanded = h_token.unsqueeze(1).expand(-1, 60, -1, -1)
 
-        h_entity = torch.cat([h_entity, left_token, right_token], dim=-1)
+        p_left_norm = F.softmax(p_left, dim=-1)
+        p_right_norm = F.softmax(p_right, dim=-1)
+
+        left_weighted = torch.sum(p_left_norm.unsqueeze(-1) * h_token_expanded, dim=2)
+        right_weighted = torch.sum(p_right_norm.unsqueeze(-1) * h_token_expanded, dim=2)
+
+        h_entity = torch.cat([h_entity, left_weighted, right_weighted], dim=-1)
 
         entity_logits = self.classifier(h_entity)
 
