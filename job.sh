@@ -28,6 +28,6 @@ pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
 
 # run eval
-python piqn.py train --config ./configs/nested.conf
+python piqn.py train --config ./configs/flat.conf
 
 deactivate

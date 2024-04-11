@@ -509,8 +509,14 @@ class EntityTypePredictor(nn.Module):
         )
 
         # Define linear layers to transform p_left and p_right respectively
-        self.Wl = nn.Linear(config.hidden_size, config.hidden_size)
-        self.Wr = nn.Linear(config.hidden_size, config.hidden_size)
+        self.max_length = 512 - config.entity_queries_num
+
+        self.Wl = nn.Sequential(
+            nn.Linear(in_features=self.max_length, out_features=self.max_length),
+        )
+        self.Wr = nn.Sequential(
+            nn.Linear(in_features=self.max_length, out_features=self.max_length),
+        )
 
     def forward(self, h_entity, h_token, p_left, p_right, token_mask):
         h_entity = self.linnear(torch.relu(h_entity))
@@ -530,15 +536,25 @@ class EntityTypePredictor(nn.Module):
         # p_left = p_left.detach()
         # p_right = p_right.detach()
 
-        h_token_expanded = h_token.unsqueeze(1).expand(-1, 60, -1, -1)
+        ################################################
+        batch_size, num_instance_queries, seq_len = p_left.shape
 
-        p_left_norm = F.softmax(p_left, dim=-1)
-        p_right_norm = F.softmax(p_right, dim=-1)
+        pad_len = self.max_length - seq_len
 
-        left_weighted = torch.sum(p_left_norm.unsqueeze(-1) * h_token_expanded, dim=2)
-        right_weighted = torch.sum(p_right_norm.unsqueeze(-1) * h_token_expanded, dim=2)
+        p_left = F.pad(p_left, (0, pad_len), "constant", 0)
+        p_right = F.pad(p_right, (0, pad_len), "constant", 0)
 
-        h_entity = torch.cat([h_entity, left_weighted, right_weighted], dim=-1)
+        p_left = self.Wl(p_left)
+        p_right = self.Wr(p_right)
+
+        p_left = F.pad(p_left, (0, -pad_len), "constant", 0)
+        p_right = F.pad(p_right, (0, -pad_len), "constant", 0)
+        ################################################
+
+        left_token = torch.matmul(p_left, h_token)
+        right_token = torch.matmul(p_right, h_token)
+
+        h_entity = torch.cat([h_entity, left_token, right_token], dim=-1)
 
         entity_logits = self.classifier(h_entity)
 
